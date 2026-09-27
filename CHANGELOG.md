@@ -45,6 +45,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     one failure does not lose the images already paid for.
   - `ai-designs.json` records the concept, the full prompt and the provider for every
     file, because months later that is the only answer to where a design came from.
+- **`stallkit web` — the same commands in a browser.** A page served from 127.0.0.1 with
+  the same tabs and buttons as the desktop window, for a Python without Tk, a machine
+  reached over SSH, or a second screen. It is the thinnest of the three front ends: a
+  request carries the argument list a person would have typed, the shared `run_cli` runs
+  it, and the page shows what came back — so nothing can validate differently here than
+  in the terminal.
+  - Defended as what it is, a browser-reachable surface in front of live credentials. A
+    one-time token in the address, required on every request; a custom header on every API
+    call, which a cross-site page cannot set without a preflight this server never
+    answers; and a Host check, because a public domain name pointed at 127.0.0.1 is how a
+    remote page reaches a local server. Assets are confined after unquoting, since
+    `%2e%2e%2f` arrives where a literal `../` would have been normalised away. The state
+    endpoint never returns a secret, only enough of the keystring to recognise it.
+  - No build step, no CDN, no web font: the page renders identically offline, which is
+    when a seller is most likely to be in here fixing credentials. Translations come from
+    the window's own dictionary, so there is one place to change wording.
+  - Commands run one at a time, because `run_cli` redirects stdout process-wide and the
+    commands share a token file and an upload lock. Output is buffered and replayed, so a
+    tab closed mid-command — something a terminal cannot do — does not lose the log.
 - **A "Draw designs" tab in the desktop window**, before "Upload products" because that
   is the order the work happens in. One idea per line, so an idea may contain spaces
   without anybody quoting anything; a style and shape picker; and the same two-step shape

@@ -31,6 +31,7 @@ stallkit seo keywords "ceramic mug"           # what actually ranks, and why
 
 - [Why this exists](#why-this-exists)
 - [Desktop app (no terminal)](#desktop-app-no-terminal)
+- [In your browser](#in-your-browser)
 - [Install](#install)
 - [Getting an Etsy API key](#getting-an-etsy-api-key)
 - [First run](#first-run)
@@ -95,6 +96,44 @@ use, [install](#install) the command line version.
 > Windows için `.exe` dosyasını çift tıkla; kurulum ve Python gerekmez. İlk açılışta
 > "Windows kişisel bilgisayarınızı korudu" çıkarsa **Ek bilgi → Yine de çalıştır**. Sonra
 > **1 · Kurulum** sekmesini yukarıdan aşağı takip et.
+
+---
+
+## In your browser
+
+```bash
+stallkit web
+```
+
+Opens a page on **your own machine** with the same tabs and the same buttons as the
+desktop window. It is useful when the window will not open — a Python without Tk, a
+server you reach over SSH, a tablet on the same desk — and it needs no extra install:
+the assets ship with the package, and there is no build step, no CDN and no web font, so
+the page renders the same with the network unplugged.
+
+```
+✓ Serving on 127.0.0.1:8479 — this machine only.
+
+  http://127.0.0.1:8479/?token=Xy3k…
+```
+
+**The address carries a one-time token and you need all of it.** Anything without the
+token gets a 403. That is not ceremony: this is a browser-reachable surface in front of
+your live Etsy credentials, so —
+
+- the token is required on every request, and every API call must also carry it in a
+  header, which a page on another site cannot set without a preflight this server never
+  answers. Without that, any website you visited could quietly POST to your shop;
+- only `localhost` and `127.0.0.1` are answered, because a public domain name pointed at
+  `127.0.0.1` is how a remote page reaches a local server;
+- it binds to the loopback interface, so nothing on your network can see it at all.
+
+Do not put it behind a tunnel or a reverse proxy. It is a local tool, and the token is
+the only thing between a URL and your shop.
+
+`--port` moves it (also `STALLKIT_WEB_PORT`), `--no-browser` prints the address instead of
+opening it. Keys and tokens live in `~/.stallkit` as always, shared with the terminal and
+the window, so you can switch between all three freely.
 
 ---
 
@@ -833,6 +872,7 @@ Task Scheduler or cron.
 | `stallkit init` | Write `.env` interactively and verify the credential |
 | `stallkit doctor` | Check config, key and connectivity |
 | `stallkit desktop` | Open the desktop window |
+| `stallkit web` | Open the same thing in your browser, served from this machine |
 | `stallkit shops list` / `add` / `remove` | Several shops on one computer; use one with `--shop <id>` |
 | `stallkit auth login` | OAuth consent flow (PKCE) |
 | `stallkit auth status` | Token, scopes, shop, remaining daily quota |
