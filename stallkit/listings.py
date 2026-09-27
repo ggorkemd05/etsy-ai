@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from .client import EtsyClient, image_problem
+from .client import MAX_LISTING_FILES, EtsyClient, file_problem, image_problem
 from .config import (
     LISTING_TYPES,
     MAX_LISTING_IMAGES,
@@ -58,8 +58,13 @@ LISTING_COLUMNS = [
     "item_height",
     "item_dimensions_unit",
     "images",
+    "files",
     "state",
 ]
+
+# Listing types whose buyer downloads Etsy will accept. A `physical` listing has no
+# downloads page, and the endpoint answers 404 rather than explaining itself.
+DIGITAL_TYPES = {"download", "both"}
 
 # Fields Etsy accepts on PATCH. `quantity` and `price` are deliberately absent:
 # on a listing with variations they live in the inventory endpoint, and sending
@@ -92,6 +97,7 @@ class RowResult:
     title: str = ""
     message: str = ""
     images_uploaded: int = 0
+    files_uploaded: int = 0
     warnings: list[str] = field(default_factory=list)
 
     @property
@@ -141,6 +147,10 @@ class PushReport:
     @property
     def images(self) -> int:
         return sum(r.images_uploaded for r in self.results)
+
+    @property
+    def files(self) -> int:
+        return sum(r.files_uploaded for r in self.results)
 
 
 def bad_tag_chars(tag: str) -> set[str]:
@@ -329,6 +339,20 @@ def build_payload(
             "without one (see `stallkit shop profiles`)"
         )
 
+    # Same shape of warning, same reason: Etsy takes the draft without a download but
+    # refuses to publish it, and a seller who left the column empty by accident would
+    # otherwise find that out one listing at a time in the browser.
+    if (
+        not is_update
+        and payload.get("type") in DIGITAL_TYPES
+        and not split_multi(row.get("files", ""))
+        and warnings is not None
+    ):
+        warnings.append(
+            "digital listing with no files — fine for a draft, but you cannot publish "
+            "until a buyer download is attached (fill the `files` column, or add it in Etsy)"
+        )
+
     if is_update:
         # Etsy's updateListing accepts a narrower set of fields than createDraftListing,
         # and price/quantity are held back on purpose. Dropping them silently means a
@@ -362,6 +386,7 @@ class PreparedRow:
     is_update: bool = False
     payload: dict[str, Any] = field(default_factory=dict)
     image_paths: list[Path] = field(default_factory=list)
+    file_paths: list[Path] = field(default_factory=list)
 
 
 def prepare(
@@ -429,9 +454,52 @@ def prepare(
         else:
             image_paths = []
 
-        prepared.append(PreparedRow(result, is_update, payload, image_paths))
+        file_paths = resolve_paths(split_multi(row.get("files", "")), base_dir)
+        if upload_images and file_paths:
+            problem = _digital_problem(row, payload, file_paths)
+            if problem:
+                result.status = "error"
+                result.message = problem
+                prepared.append(PreparedRow(result, is_update, payload, image_paths, file_paths))
+                continue
+        else:
+            file_paths = []
+
+        prepared.append(PreparedRow(result, is_update, payload, image_paths, file_paths))
 
     return prepared
+
+
+def _digital_problem(
+    row: dict[str, str], payload: dict[str, Any], file_paths: list[Path]
+) -> str | None:
+    """Why this row's digital files could not be uploaded, or None if they can.
+
+    Checked before the create for the same reason as the images: Etsy attaches files
+    only after the listing exists, so a refusal discovered then leaves a draft in the
+    shop that stallkit holds no delete scope to remove.
+    """
+    # On an update the row need not restate the type, so the listing's own type is the
+    # authority and only an explicit contradiction is worth failing over.
+    declared = payload.get("type") or (row.get("type") or "").strip().lower()
+    if declared and declared not in DIGITAL_TYPES:
+        return (
+            f"{len(file_paths)} file(s) given but type is {declared!r} — Etsy only accepts "
+            "buyer downloads on a digital listing. Set type to 'download', or 'both' if "
+            "you also ship it."
+        )
+    if len(file_paths) > MAX_LISTING_FILES:
+        return (
+            f"{len(file_paths)} files given, Etsy allows {MAX_LISTING_FILES} per listing. "
+            "Nothing was dropped — zip them together or remove the extras yourself."
+        )
+    missing = [p for p in file_paths if not p.is_file()]
+    if missing:
+        return f"file not found: {', '.join(str(p) for p in missing[:3])}"
+    rejected = [problem for p in file_paths if (problem := file_problem(p))]
+    if rejected:
+        return "; ".join(rejected[:3])
+    return None
 
 
 def inventory_for_copy(inventory: dict[str, Any]) -> dict[str, Any]:
@@ -526,6 +594,7 @@ def push(
                 item.result.status = "dry-run"
                 item.result.message = (
                     f"{len(item.payload)} fields, {len(item.image_paths)} image(s)"
+                    + (f", {len(item.file_paths)} download(s)" if item.file_paths else "")
                 )
             _emit(report, item.result, on_progress)
         return report
@@ -612,7 +681,7 @@ def _write_row(
                 f"be set: {exc}. The listing IS in your shop — add the options in Etsy."
             )
 
-    if not (upload_images and item.image_paths and result.listing_id):
+    if not (upload_images and result.listing_id):
         return
 
     for rank, image in enumerate(item.image_paths, start=1):
@@ -628,6 +697,23 @@ def _write_row(
                 f"{result.message} (id {result.listing_id}), but image {rank} of "
                 f"{len(item.image_paths)} failed: {exc}. The listing IS in your shop — "
                 "add the remaining images in Etsy, or fix and re-run just this row."
+            )
+            return
+
+    # Downloads go up after the images, and a failure here is `partial` for the same
+    # reason: the draft is real. It is also the one failure that leaves a digital
+    # listing unpublishable, so the message says that rather than only naming the file.
+    for rank, digital in enumerate(item.file_paths, start=1):
+        try:
+            client.upload_listing_file(result.listing_id, digital, rank=rank)
+            result.files_uploaded += 1
+        except (EtsyApiError, ValidationError, OSError, ValueError) as exc:
+            result.status = "partial"
+            result.message = (
+                f"{result.message} (id {result.listing_id}), but download {rank} of "
+                f"{len(item.file_paths)} failed: {exc}. The listing IS in your shop and "
+                "cannot be published until a file is attached — add it in Etsy, or fix "
+                "and re-run just this row."
             )
             return
 
@@ -669,6 +755,10 @@ def pull(client: EtsyClient, *, state: str = "active", max_items: int | None = N
                 "item_height": listing.get("item_height") or "",
                 "item_dimensions_unit": listing.get("item_dimensions_unit") or "",
                 "images": "",  # Etsy serves images by URL; re-uploading them is never wanted.
+                # Etsy never hands a digital file back, only its id and name, so there is
+                # no local path to write here — and pushing this row again must not
+                # attach a second copy of a download the listing already has.
+                "files": "",
                 "state": listing.get("state", ""),
                 "url": listing.get("url", ""),
                 "views": listing.get("views", ""),

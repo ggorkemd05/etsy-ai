@@ -370,6 +370,30 @@ class EtsyClient:
             files={**files, **{k: (None, v) for k, v in data.items()}},
         )
 
+    def upload_listing_file(
+        self, listing_id: int, path: Path, *, rank: int = 1, name: str = ""
+    ) -> dict[str, Any]:
+        """Attach a buyer-downloadable file to a digital listing.
+
+        Same shape as the image endpoint and the same reason for refusing first: by the
+        time this runs the draft exists, so a file Etsy will not take can only leave the
+        row `partial`. `name` is what the buyer sees on their downloads page; Etsy
+        defaults it to the uploaded filename, which is rarely what a seller would choose.
+        """
+        mime = _file_mime_for(path)
+        with path.open("rb") as handle:
+            files: dict[str, Any] = {"file": (path.name, handle.read(), mime)}
+        data = {"rank": str(rank), "name": (name or path.name)[:255]}
+        return self.request(
+            "POST",
+            f"/shops/{self.shop_id()}/listings/{listing_id}/files",
+            files={**files, **{k: (None, v) for k, v in data.items()}},
+        )
+
+    def listing_files(self, listing_id: int) -> list[dict[str, Any]]:
+        payload = self.get(f"/shops/{self.shop_id()}/listings/{listing_id}/files")
+        return (payload or {}).get("results") or []
+
     def receipts(self, *, max_items: int | None = None, **filters: Any) -> Iterator[dict[str, Any]]:
         yield from self.paginate(
             f"/shops/{self.shop_id()}/receipts", params=filters, max_items=max_items
@@ -445,3 +469,73 @@ def _mime_for(path: Path) -> str:
     if problem:
         raise ValidationError(problem)
     return _MIME[path.suffix.lower()]
+
+
+# What Etsy's digital-download endpoint accepts. This is a different and much wider
+# list than _MIME above: a listing *image* may only be JPG/PNG/GIF, while the file the
+# buyer downloads may be a PDF, an archive, audio, a 3D model or a document. Nothing is
+# guessed here either — `mimetypes` would happily invent a type for a suffix Etsy
+# refuses, and the upload would fail after the draft already existed.
+_FILE_MIME = {
+    ".pdf": "application/pdf",
+    ".zip": "application/zip",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".bmp": "image/bmp",
+    ".tif": "image/tiff",
+    ".tiff": "image/tiff",
+    ".svg": "image/svg+xml",
+    ".txt": "text/plain",
+    ".rtf": "application/rtf",
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".epub": "application/epub+zip",
+    ".mobi": "application/x-mobipocket-ebook",
+    ".stl": "model/stl",
+    ".dxf": "image/vnd.dxf",
+    ".svgz": "image/svg+xml",
+    ".mp3": "audio/mpeg",
+    ".m4a": "audio/mp4",
+    ".wav": "audio/wav",
+    ".mp4": "video/mp4",
+    ".mov": "video/quicktime",
+    ".mpeg": "video/mpeg",
+}
+
+DOWNLOADABLE_SUFFIXES = frozenset(_FILE_MIME)
+
+# Etsy's per-file ceiling for a digital download, and how many one listing may carry.
+MAX_FILE_BYTES = 20 * 1024 * 1024
+MAX_LISTING_FILES = 5
+
+
+def file_problem(path: Path) -> str | None:
+    """Why Etsy would refuse this download file, or None if it would take it."""
+    suffix = path.suffix.lower()
+    if suffix not in DOWNLOADABLE_SUFFIXES:
+        return (
+            f"{path.name}: Etsy does not accept {suffix or 'a file with no extension'} as "
+            "a digital download. Common choices are .pdf, .zip, .png and .jpg — put "
+            "anything else inside a .zip"
+        )
+    try:
+        size = path.stat().st_size
+    except OSError as exc:
+        return f"{path.name}: cannot be read ({exc})"
+    if size == 0:
+        return f"{path.name} is empty"
+    if size > MAX_FILE_BYTES:
+        return (
+            f"{path.name} is {size / 1024 / 1024:.1f}MB and Etsy's limit for a digital "
+            f"file is {MAX_FILE_BYTES // 1024 // 1024}MB — split it, or zip it smaller"
+        )
+    return None
+
+
+def _file_mime_for(path: Path) -> str:
+    problem = file_problem(path)
+    if problem:
+        raise ValidationError(problem)
+    return _FILE_MIME[path.suffix.lower()]

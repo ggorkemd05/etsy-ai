@@ -133,7 +133,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "save_as_csv": "Save as CSV…",
         "push_title": "Create or update in bulk",
         "push_hint": "An empty listing_id creates a new draft; a filled one updates that listing. "
-                     "Results are written next to the file as …-results.csv.",
+                     "Selling a download? Set type to 'download' and put the buyer's file in the "
+                     "files column. Results are written next to the file as …-results.csv.",
         "csv_file": "CSV file",
         "copy_variations_from": "Copy variations from listing",
         "send_to_etsy": "Send to Etsy",
@@ -343,7 +344,8 @@ STRINGS: dict[str, dict[str, str]] = {
         "save_as_csv": "CSV olarak kaydet…",
         "push_title": "Toplu oluştur veya güncelle",
         "push_hint": "listing_id boşsa yeni taslak oluşturulur, doluysa o listing güncellenir. "
-                     "Sonuçlar dosyanın yanına …-results.csv olarak yazılır.",
+                     "Dijital satış mı? type'ı 'download' yap ve alıcının indireceği dosyayı "
+                     "files kolonuna yaz. Sonuçlar dosyanın yanına …-results.csv olarak yazılır.",
         "csv_file": "CSV dosyası",
         "copy_variations_from": "Varyasyonları şu listingden kopyala",
         "send_to_etsy": "Etsy'ye gönder",

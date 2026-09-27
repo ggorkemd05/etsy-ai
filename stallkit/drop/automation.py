@@ -86,6 +86,12 @@ class _RecordedClient:
         _save(self.path, self.state)
         return result
 
+    def upload_listing_file(self, listing_id, path, *, rank, name=""):
+        result = self.client.upload_listing_file(listing_id, path, rank=rank, name=name)
+        self.entry["files_uploaded"] = rank
+        _save(self.path, self.state)
+        return result
+
 
 def run(workspace: Workspace, template: Template, *, client: EtsyClient | None = None,
         dry_run: bool = False) -> AutoReport:
@@ -97,8 +103,15 @@ def run(workspace: Workspace, template: Template, *, client: EtsyClient | None =
     workspace.require()
     if client is None and not dry_run:
         raise ValidationError("Connect your Etsy shop before uploading drafts.")
-    if template.fields.get("type", "physical") != "physical":
-        raise ValidationError("Automatic upload currently supports physical products only; digital delivery files are not supported.")
+    # Physical and digital both work. A digital template needs the buyer's file to
+    # exist before the draft does — pipeline.run() skips any product that has none, and
+    # a skipped product already stops this run, so an unpublishable draft is unreachable
+    # from here.
+    listing_type = template.fields.get("type", "physical")
+    if listing_type not in {"physical", "download", "both"}:
+        raise ValidationError(
+            f"Template type {listing_type!r} is not one Etsy accepts on a new listing."
+        )
     with _lock(workspace.root):
         path = workspace.root / "upload-history.json"
         try:
@@ -172,7 +185,7 @@ def run(workspace: Workspace, template: Template, *, client: EtsyClient | None =
         # the number is set to the product's real line in review.csv instead.
         for line, (product, row) in enumerate(zip(prepared.ready, rows), start=2):
             entry = {"status": "pending", "listing_id": None, "images_uploaded": 0,
-                     "review_csv": str(prepared.csv_path)}
+                     "files_uploaded": 0, "review_csv": str(prepared.csv_path)}
             history[product.source.name] = entry
             # Persist intent BEFORE the request, including ambiguous network failures.
             _save(path, state)

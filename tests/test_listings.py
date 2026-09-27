@@ -42,7 +42,23 @@ def test_digital_listing_does_not_warn_about_shipping():
     row["type"] = "download"
     warnings: list[str] = []
     assert build_payload(row, is_update=False, warnings=warnings)["type"] == "download"
-    assert warnings == []
+    assert not any("shipping_profile_id" in w for w in warnings)
+
+
+def test_digital_listing_with_no_files_warns_that_it_cannot_be_published():
+    # Etsy takes the draft and then refuses to publish it, which is a warning rather
+    # than an error: staging 300 digital drafts and attaching the files later is fine.
+    row = dict(BASE_ROW, type="download")
+    warnings: list[str] = []
+    build_payload(row, is_update=False, warnings=warnings)
+    assert any("cannot publish" in w for w in warnings)
+
+
+def test_digital_listing_with_files_is_not_warned_about():
+    row = dict(BASE_ROW, type="download", files="prints/poster-a2.pdf")
+    warnings: list[str] = []
+    build_payload(row, is_update=False, warnings=warnings)
+    assert not any("download" in w for w in warnings)
 
 
 def test_title_over_limit_rejected():

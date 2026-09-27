@@ -634,6 +634,7 @@ def listings_template(
         "item_height": "",
         "item_dimensions_unit": "",
         "images": "photos/mug-1.jpg|photos/mug-2.jpg",
+        "files": "",
         "state": "",
     }
     csvio.write_rows(out, [example], columns=listings_mod.LISTING_COLUMNS)
@@ -641,7 +642,9 @@ def listings_template(
     console.print(
         "  Fill [cyan]shipping_profile_id[/] from `stallkit shop profiles` and "
         "[cyan]taxonomy_id[/] from `stallkit shop taxonomy <word>`.\n"
-        "  Multi-value cells use [cyan]|[/] as the separator. Image paths are relative to the CSV."
+        "  Multi-value cells use [cyan]|[/] as the separator. Image paths are relative to the CSV.\n"
+        "  Selling a download? Set [cyan]type[/] to `download` and put the buyer's file in "
+        "[cyan]files[/]."
     )
 
 
@@ -744,15 +747,16 @@ def listings_push(
     elif report.aborted:
         _fail(report.aborted_reason)
     else:
+        downloads = f", {report.files} download(s)" if report.files else ""
         _ok(
             f"Created {report.created}, updated {report.updated}, "
-            f"uploaded {report.images} image(s), {report.errors} error(s)."
+            f"uploaded {report.images} image(s){downloads}, {report.errors} error(s)."
         )
         if report.partial:
             _warn(
                 f"{report.partial} listing(s) were created but are not complete — "
-                "missing images or variations. They exist in your shop — see the rows "
-                "marked 'partial' above."
+                "missing images, downloads or variations. They exist in your shop — see "
+                "the rows marked 'partial' above."
             )
         if report.created:
             console.print("[dim]New listings are drafts — publish them from your Etsy dashboard.[/]")
@@ -768,11 +772,15 @@ def listings_push(
                     "status": r.status,
                     "title": r.title,
                     "images_uploaded": r.images_uploaded,
+                    "files_uploaded": r.files_uploaded,
                     "message": r.message,
                 }
                 for r in report.results
             ],
-            columns=["row", "listing_id", "action", "status", "title", "images_uploaded", "message"],
+            columns=[
+                "row", "listing_id", "action", "status", "title",
+                "images_uploaded", "files_uploaded", "message",
+            ],
         )
         _ok(f"Results written to {out}")
 
@@ -796,6 +804,8 @@ def _print_row_result(result: listings_mod.RowResult) -> None:
         )
     else:
         extra = f", {result.images_uploaded} image(s)" if result.images_uploaded else ""
+        if result.files_uploaded:
+            extra += f", {result.files_uploaded} download(s)"
         console.print(
             f"[green]{TICK} row {result.row}[/] {result.action} "
             f"{_hide(result.listing_id, 'id')} — {_hide(result.title)}{extra}"
@@ -1324,6 +1334,11 @@ def drop_run(
         f"{report.images_made} image(s) made across {report.concepts} concept(s) "
         f"({report.researched} researched, {report.cached} from cache)."
     )
+    if report.downloads_found:
+        console.print(
+            f"[dim]Digital template: {report.downloads_found} buyer download(s) attached "
+            f"across {len(report.ready)} listing(s).[/]"
+        )
     if not report.csv_path:
         raise typer.Exit(1)
 

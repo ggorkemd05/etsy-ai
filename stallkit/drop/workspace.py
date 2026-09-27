@@ -14,12 +14,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ..client import DOWNLOADABLE_SUFFIXES
 from ..errors import ValidationError
 
 MOCKUPS_DIR = "1-MOCKUPS"
 PRODUCTS_DIR = "2-PRODUCTS"
 DRAFTS_DIR = "3-DRAFTS"
 ARCHIVE_DIR = "archive"
+
+# Inside a ready-photo product folder, the one subfolder that is not listing images:
+# what the buyer downloads after paying. A subfolder is how the two are told apart
+# without a naming convention nobody would remember — and `_images()` never descends,
+# so these files were already invisible to the image side before this existed.
+DOWNLOADS_DIR = "files"
 
 # Calibration previews go under 3-DRAFTS, never beside the templates: anything with an
 # image extension in 1-MOCKUPS *is* a mockup as far as mockup_files() is concerned, so a
@@ -56,6 +63,12 @@ ETSY STUDIO
             folder per product and put its numbered images inside (01, 02, ...).
             Name the folder after the product. Run: stallkit drop auto
 
+            Selling a DOWNLOAD? A loose design file is itself what the buyer gets.
+            For a product folder, put the buyer's files in a `files` subfolder:
+              2-PRODUCTS/mountain sunset print/01-cover.jpg
+              2-PRODUCTS/mountain sunset print/files/mountain-sunset-A2.pdf
+            This only applies when your template listing's type is download/both.
+
 3-DRAFTS    What comes out: composited images and review.csv.
             `stallkit drop run` stops here so you can check review.csv first.
             `stallkit drop auto` uploads the drafts straight away, in one step.
@@ -81,6 +94,13 @@ ETSY STUDIO (TR)
             kullanacagin klasor bu. Hazir mockuplar icin her urune ayri bir klasor
             ac; 01, 02 diye siraladigin resimleri icine koy. Klasore urunun adini
             ver. Komut: stallkit drop auto. Bir urun klasoru = bir listing.
+
+            DIJITAL satis mi? Tek basina duran tasarim dosyasinin kendisi alicinin
+            indirdigi dosya olur. Urun klasorunde ise alicinin dosyalarini `files`
+            alt klasorune koy:
+              2-PRODUCTS/dag gun batimi/01-vitrin.jpg
+              2-PRODUCTS/dag gun batimi/files/dag-gun-batimi-A2.pdf
+            Bu sadece sablon listingin tipi download/both ise gecerli.
 
 3-DRAFTS    Cikan sonuc: giydirilmis gorseller ve review.csv.
             `stallkit drop run` burada durur; once review.csv'ye bakarsin.
@@ -185,6 +205,25 @@ class Workspace:
                 if images:
                     groups.append((folder, sorted(images, key=_natural_key)))
         return groups
+
+    def product_downloads(self, folder: Path) -> list[Path]:
+        """What the buyer downloads for one ready-photo product, in listing order.
+
+        Only suffixes Etsy accepts as a download are returned: a `.DS_Store` or a
+        Photoshop working file left in the folder would otherwise fail the whole row
+        over something the seller never meant to sell.
+        """
+        downloads = folder / DOWNLOADS_DIR
+        if not downloads.is_dir():
+            return []
+        return sorted(
+            (
+                p
+                for p in downloads.iterdir()
+                if p.is_file() and p.suffix.lower() in DOWNLOADABLE_SUFFIXES
+            ),
+            key=_natural_key,
+        )
 
     def read_template(self) -> dict[str, Any]:
         if not self.template_path.exists():

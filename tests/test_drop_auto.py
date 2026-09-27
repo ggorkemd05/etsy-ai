@@ -60,6 +60,23 @@ class Client:
         return {}
 
 
+class DigitalClient(Client):
+    """A Client that also accepts the buyer's download, and records its progress."""
+
+    def __init__(self, ws, fail=None):
+        super().__init__(ws, fail)
+        self.files = []
+
+    def upload_listing_file(self, listing_id, path, *, rank, name=""):
+        state = json.loads((self.ws.root / "upload-history.json").read_text())
+        # Every image goes up before the first download, so the entry already says so.
+        assert state["123"]["mountain sunset shirt"]["images_uploaded"] == 3
+        if self.fail == "file":
+            raise OSError("upload interrupted")
+        self.files.append((path.name, rank))
+        return {}
+
+
 def test_folder_is_one_listing_and_ready_pngs_are_not_composited(studio):
     ws, template = studio
     report = pipeline.run(ws, template)
@@ -173,11 +190,40 @@ def test_invalid_template_aborts_whole_batch(studio):
     assert client.creates == 0
 
 
-def test_digital_template_is_not_uploaded_without_delivery_files(studio):
+def test_digital_template_is_not_uploaded_without_a_buyer_download(studio):
+    # A digital draft with nothing attached cannot be published, so it is never created.
     ws, template = studio
     template.fields["type"] = "download"
-    with pytest.raises(ValidationError, match="digital delivery"):
+    with pytest.raises(ValidationError, match="no buyer download found"):
         automation.run(ws, template, dry_run=True)
+
+
+def test_a_product_folder_sells_the_files_subfolder_as_the_download(studio):
+    ws, template = studio
+    template.fields["type"] = "download"
+    downloads = ws.products / "mountain sunset shirt" / "files"
+    downloads.mkdir()
+    (downloads / "mountain-sunset-A2.pdf").write_bytes(b"%PDF-1.4 print file")
+
+    client = DigitalClient(ws)
+    report = automation.run(ws, template, client=client)
+    assert report.uploaded.created == 1
+    assert client.files == [("mountain-sunset-A2.pdf", 1)]
+    # The download is not one of the listing images, and the images are not downloads.
+    assert "mountain-sunset-A2.pdf" not in [name for name, _ in client.images]
+
+
+def test_a_loose_design_is_its_own_download(studio):
+    ws, template = studio
+    template.fields["type"] = "download"
+    Image.new("RGBA", (40, 40), (10, 20, 30, 0)).save(ws.products / "retro surf print.png")
+    Image.new("RGB", (60, 60), (200, 200, 200)).save(ws.mockups / "poster-frame.jpg")
+
+    report = pipeline.run(ws, template)
+    loose = next(r for r in report.rows if r.source.name == "retro surf print.png")
+    assert loose.downloads == [loose.source]
+    # The composites are the shop window; the artwork itself is what the buyer gets.
+    assert loose.source not in loose.images
 
 
 def _history(ws, entries):

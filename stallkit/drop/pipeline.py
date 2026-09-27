@@ -18,11 +18,11 @@ from .. import csvio
 from ..client import EtsyClient
 from ..config import MAX_LISTING_IMAGES
 from ..errors import ValidationError
-from ..listings import LISTING_COLUMNS
+from ..listings import DIGITAL_TYPES, LISTING_COLUMNS
 from ..seo import MarketReport, research
 from . import cache, generate, mockup, seeds
 from .template import Template
-from .workspace import Workspace
+from .workspace import DOWNLOADS_DIR, Workspace
 
 REVIEW_FILE = "review.csv"
 
@@ -39,6 +39,7 @@ class DropRow:
     tags: list[str] = field(default_factory=list)
     description: str = ""
     images: list[Path] = field(default_factory=list)
+    downloads: list[Path] = field(default_factory=list)
     evidence: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     skipped: bool = False
@@ -69,6 +70,10 @@ class DropReport:
     @property
     def images_made(self) -> int:
         return sum(len(r.images) for r in self.rows)
+
+    @property
+    def downloads_found(self) -> int:
+        return sum(len(r.downloads) for r in self.rows)
 
 
 def estimate_requests(products: int, concepts: int, images_per_product: int) -> int:
@@ -172,6 +177,11 @@ def run(
             f"{len(mockups)} mockup(s){flat_note} is {planned} images per listing, and "
             f"Etsy allows {MAX_LISTING_IMAGES}. {remedy}"
         )
+
+    # A digital template changes what a product *is*: the images become the shop-window
+    # preview and the buyer takes a file away. Driven by the template rather than a flag
+    # so one workspace cannot half-produce digital listings.
+    digital = template.fields.get("type", "physical") in DIGITAL_TYPES
 
     positions = mockup.load_positions(workspace.positions_path)
     # One calibration covers every mockup of the same size — that is the point of
@@ -316,6 +326,10 @@ def run(
                 "no images produced — put at least one mockup in 1-MOCKUPS, "
                 "or drop a finished product photo instead of transparent artwork"
             )
+
+        if digital and not row.skipped:
+            _attach_downloads(workspace, row)
+
         say(f"prepared {row.source.name}")
 
     report.rows = rows
@@ -327,6 +341,30 @@ def run(
             columns=LISTING_COLUMNS + REVIEW_EXTRA_COLUMNS,
         )
     return report
+
+
+def _attach_downloads(workspace: Workspace, row: DropRow) -> None:
+    """Work out what the buyer of this product downloads.
+
+    A loose design is its own answer: the print file the mockups were built from is
+    exactly what a digital buyer is paying for, so nothing has to be nominated. A ready-
+    photo folder is not — its images are shop-window photos — so the file has to be put
+    somewhere unambiguous, and that is the `files` subfolder.
+
+    An unpublishable draft is worse than no draft, so a product with nothing to hand
+    over is skipped with the reason rather than created and left broken in the shop.
+    """
+    if row.source.is_dir():
+        row.downloads = workspace.product_downloads(row.source)
+        if not row.downloads:
+            row.skipped = True
+            row.warnings.append(
+                f"digital template, but no buyer download found in "
+                f"{row.source.name}/{DOWNLOADS_DIR}/ — put the file the buyer gets there "
+                "(.pdf, .zip, .png, .jpg), or switch the template to physical"
+            )
+        return
+    row.downloads = [row.source]
 
 
 def _to_csv_row(row: DropRow, template: Template, base: Path) -> dict[str, Any]:
@@ -346,6 +384,7 @@ def _to_csv_row(row: DropRow, template: Template, base: Path) -> dict[str, Any]:
             "materials": template.materials,
             "state": "",
             "images": [_relative(p, base) for p in row.images],
+            "files": [_relative(p, base) for p in row.downloads],
             "source_file": row.source.name,
             "concept": row.seed.text,
             "evidence": "; ".join(row.evidence),
