@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="referrer" content="no-referrer" />
+    <title>stallkit</title>
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to the form</a>
+
+    <header class="topbar">
+      <div class="brand">
+        <span class="wordmark">stallkit</span>
+        <span class="tagline" data-t="tagline"></span>
+      </div>
+
+      <div class="topbar-controls">
+        <span class="pill" id="shop-state" hidden></span>
+
+        <label class="field inline">
+          <span data-t="shop">Shop</span>
+          <select id="shop-picker"></select>
+        </label>
+
+        <label class="field inline">
+          <span class="sr-only">Language</span>
+          <select id="language-picker"></select>
+        </label>
+      </div>
+    </header>
+
+    <div class="layout">
+      <main id="main" class="panel">
+        <nav class="tabs" id="tabs" role="tablist"></nav>
+        <div id="panes"></div>
+      </main>
+
+      <section class="console" aria-live="polite">
+        <div class="console-head">
+          <h2 data-t="log"></h2>
+          <div class="console-actions">
+            <label class="check compact">
+              <input type="checkbox" id="anonymise" />
+              <span data-t="anonymise"></span>
+            </label>
+            <button type="button" class="ghost" id="copy-log" data-t="copy"></button>
+            <button type="button" class="ghost" id="clear-log" data-t="clear"></button>
+          </div>
+        </div>
+
+        <pre class="log" id="log" tabindex="0"></pre>
+
+        <div class="prompt" id="prompt" hidden>
+          <label class="field">
+            <span id="prompt-question"></span>
+            <input type="text" id="prompt-answer" autocomplete="off" />
+          </label>
+          <button type="button" class="primary" id="prompt-send" data-t="web_send"></button>
+        </div>
+
+        <p class="console-empty" id="log-empty" data-t="welcome"></p>
+      </section>
+    </div>
+
+    <footer class="footer">
+      <span id="trademark"></span>
+      <span class="footer-right">
+        <span id="version"></span>
+        <span id="home-path" class="mono"></span>
+      </span>
+    </footer>
+
+    <dialog id="confirm">
+      <form method="dialog">
+        <h2 id="confirm-title">stallkit</h2>
+        <p id="confirm-body"></p>
+        <div class="dialog-actions">
+          <button value="no" class="ghost" data-t="web_no"></button>
+          <button value="yes" class="primary" data-t="web_yes"></button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="picker">
+      <h2 data-t="web_pick_folder"></h2>
+      <p class="mono path" id="picker-path"></p>
+      <ul class="picker-list" id="picker-list"></ul>
+      <div class="dialog-actions">
+        <button type="button" class="ghost" id="picker-cancel" data-t="cancel"></button>
+        <button type="button" class="primary" id="picker-choose" data-t="web_use_folder"></button>
+      </div>
+    </dialog>
+
+    <script>
+      window.STALLKIT_TOKEN = "__STALLKIT_TOKEN__";
+    </script>
+    <script type="module" src="/static/app.js"></script>
+  </body>
+</html>

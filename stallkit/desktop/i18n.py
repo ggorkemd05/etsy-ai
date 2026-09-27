@@ -271,6 +271,18 @@ STRINGS: dict[str, dict[str, str]] = {
         "need_listing_numbers": "Type one or more listing numbers, separated by spaces or commas.",
         "need_board": "Type the board's name (see “My boards”).",
         "confirm_close": "Something is still running. Closing now may leave a half-finished draft.\n\nClose anyway?",
+        # The browser front end. A window has a title bar, a native file dialog and an OS
+        # confirmation; a page has none of those, so it needs words for them.
+        "web_yes": "Yes, go ahead",
+        "web_no": "No",
+        "web_send": "Send",
+        "web_pick_folder": "Choose a folder",
+        "web_use_folder": "Use this folder",
+        "web_save_to": "Save the file as",
+        "web_busy": "Working…",
+        "web_wait_for_task": "Something is already running. Wait for it to finish.",
+        "web_local_only": "Runs on this computer only — nothing is sent anywhere except Etsy.",
+        "web_open_links": "Open in a new tab:",
     },
     "tr": {
         "tagline": "Kendi bilgisayarında Etsy otomasyonu",
@@ -522,6 +534,16 @@ STRINGS: dict[str, dict[str, str]] = {
         "need_board": "Panonun adını yaz (“Panolarım”a basarak görebilirsin).",
         "confirm_close": "Hâlâ çalışan bir işlem var. Şimdi kapatırsan yarım kalmış bir taslak oluşabilir.\n\n"
                          "Yine de kapatılsın mı?",
+        "web_yes": "Evet, devam et",
+        "web_no": "Hayır",
+        "web_send": "Gönder",
+        "web_pick_folder": "Klasör seç",
+        "web_use_folder": "Bu klasörü kullan",
+        "web_save_to": "Dosyayı şuraya kaydet",
+        "web_busy": "Çalışıyor…",
+        "web_wait_for_task": "Zaten bir şey çalışıyor. Bitmesini bekle.",
+        "web_local_only": "Yalnızca bu bilgisayarda çalışır — Etsy dışında hiçbir yere bir şey gitmez.",
+        "web_open_links": "Yeni sekmede aç:",
     },
 }
 

@@ -485,6 +485,37 @@ def desktop() -> None:
     launch()
 
 
+@app.command("web")
+def web(
+    port: Optional[int] = typer.Option(
+        None, "--port", "-p", help="Port to listen on. Also STALLKIT_WEB_PORT."
+    ),
+    no_browser: bool = typer.Option(
+        False, "--no-browser", help="Print the address instead of opening it."
+    ),
+) -> None:
+    """Open stallkit in your browser: the same commands, as a page on this computer."""
+    from .web import server as web_server
+
+    chosen = port if port is not None else web_server.default_port()
+    console.print(
+        Panel(
+            f"{TICK} Serving on [cyan]127.0.0.1:{chosen}[/] — this machine only.\n"
+            "The address below carries a one-time token. Anything without it is refused,\n"
+            "so another program or another tab cannot drive your shop.\n"
+            "[dim]Stop it with Ctrl+C.[/]",
+            title="stallkit web",
+            border_style="green",
+        )
+    )
+    web_server.serve(
+        chosen,
+        open_browser=not no_browser,
+        announce=lambda url: console.print(f"\n  [bold cyan]{url}[/]\n"),
+    )
+    _ok("Stopped.")
+
+
 # ---------------------------------------------------------------- shop
 
 
