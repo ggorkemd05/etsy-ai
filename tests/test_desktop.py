@@ -357,7 +357,7 @@ def log_text(window) -> str:
 
 
 def test_the_window_builds_every_tab_and_keeps_typed_values_across_languages(window):
-    assert len(window.notebook.tabs()) == 6
+    assert len(window.notebook.tabs()) == 7
     window.vars["keystring"].set("typed-before-switch")
     window._switch_language("Türkçe")
     assert window.lang == "tr"
@@ -435,10 +435,18 @@ def test_every_button_builds_the_command_it_says(window, monkeypatch, tmp_path):
         "template_listing": "111", "inventory_from": "222", "country": "tr",
         "keyword": "wall mural", "suggest_listing": "333", "suggest_keyword": "mural",
         "pin_listings": "1, 2", "pin_board": "My Board", "pin_images": "1-3",
+        "design_variants": "3", "design_style": "vintage", "design_shape": "portrait",
+        "design_keyword": "botanical wall art", "design_count": "6",
     }.items():
         window.vars[key].set(value)
     window.vars["use_inventory"].set(True)
+    window.design_box.delete("1.0", "end")
+    window.design_box.insert("1.0", "pressed eucalyptus leaf\nretro surf sunset\n")
 
+    window.draw_designs(dry_run=True)
+    window.draw_designs(dry_run=False)
+    window.draw_from_keyword(dry_run=True)
+    window.draw_from_keyword(dry_run=False)
     window.capture_template()
     window.upload_drafts()
     window.export_listings()
@@ -458,7 +466,16 @@ def test_every_button_builds_the_command_it_says(window, monkeypatch, tmp_path):
     window.disconnect_pinterest()
 
     out = str(tmp_path)
+    design_options = ["--variants", "3", "--style", "vintage", "--shape", "portrait"]
     assert ran == [
+        ["design", "new", "pressed eucalyptus leaf", "retro surf sunset",
+         *design_options, "--path", ws, "--dry-run"],
+        ["design", "new", "pressed eucalyptus leaf", "retro surf sunset",
+         *design_options, "--path", ws, "--yes"],
+        ["design", "from-keyword", "botanical wall art", *design_options, "--path", ws,
+         "--designs", "6", "--dry-run"],
+        ["design", "from-keyword", "botanical wall art", *design_options, "--path", ws,
+         "--designs", "6", "--yes"],
         ["drop", "template", "--from-listing", "111", "--path", ws],
         ["drop", "auto", "--path", ws],
         ["listings", "pull", "--state", "active", "-o", f"{out}{os.sep}listings-active.csv"],
@@ -480,6 +497,44 @@ def test_every_button_builds_the_command_it_says(window, monkeypatch, tmp_path):
         ["auth", "logout"],
         ["pinterest", "logout"],
     ]
+
+
+def test_drawing_with_no_ideas_typed_asks_for_one_instead_of_running(window, monkeypatch):
+    ran: list[list[str]] = []
+    told: list[str] = []
+    monkeypatch.setattr(window, "run", lambda args, then=None: ran.append(list(args)))
+    monkeypatch.setattr(app_mod.messagebox, "showinfo", lambda *a, **k: told.append(a[1]))
+    window.design_box.delete("1.0", "end")
+
+    window.draw_designs(dry_run=True)
+    assert ran == []
+    assert told == [i18n.text("en", "design_need_concepts")]
+
+
+def test_the_cutout_checkbox_reaches_the_command(window, monkeypatch, tmp_path):
+    ran: list[list[str]] = []
+    monkeypatch.setattr(window, "run", lambda args, then=None: ran.append(list(args)))
+    window.vars["workspace"].set(str(tmp_path / "ws"))
+    window.vars["design_variants"].set("")
+    window.vars["design_style"].set("")
+    window.vars["design_shape"].set("")
+    window.vars["design_cutout"].set(True)
+    window.design_box.delete("1.0", "end")
+    window.design_box.insert("1.0", "fern frond")
+
+    window.draw_designs(dry_run=True)
+    assert ran == [
+        ["design", "new", "fern frond", "--path", str(tmp_path / "ws"), "--cutout", "--dry-run"]
+    ]
+
+
+def test_ideas_typed_in_the_box_survive_a_language_switch(window):
+    # The box is a Text widget, not a StringVar, so build() would lose it without help.
+    window.design_box.delete("1.0", "end")
+    window.design_box.insert("1.0", "pressed eucalyptus leaf")
+    window._design_concepts()
+    window._switch_language("Türkçe")
+    assert window.design_box.get("1.0", "end").strip() == "pressed eucalyptus leaf"
 
 
 def test_saying_no_sends_nothing_to_the_shop(window, monkeypatch, tmp_path):

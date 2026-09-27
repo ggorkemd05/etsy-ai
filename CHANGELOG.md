@@ -45,6 +45,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     one failure does not lose the images already paid for.
   - `ai-designs.json` records the concept, the full prompt and the provider for every
     file, because months later that is the only answer to where a design came from.
+- **A "Draw designs" tab in the desktop window**, before "Upload products" because that
+  is the order the work happens in. One idea per line, so an idea may contain spaces
+  without anybody quoting anything; a style and shape picker; and the same two-step shape
+  as everywhere else in the window — show the prompts, then draw. The confirmation dialog
+  says plainly that the provider bills for each image and stallkit does not, since unlike
+  a draft listing a generated image cannot be undone by deleting the file.
 
 ## [0.2.0] — 2026-09-26
 

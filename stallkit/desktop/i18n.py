@@ -98,7 +98,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "status_reconnect": "! Reconnect needed",
         "status_offline": "● No connection",
         # drop
-        "tab_drop": "2 · Upload products",
+        "tab_drop": "3 · Upload products",
         "drop_folder_title": "Your products folder",
         "drop_folder_hint": "Inside 2-PRODUCTS, make one folder per product and put its photos in it, "
                             "named 01, 02, 03… in the order you want. The folder's name becomes the "
@@ -127,6 +127,40 @@ STRINGS: dict[str, dict[str, str]] = {
         "preview_print_area": "Preview print area",
         # listings
         "tab_listings": "Listings (CSV)",
+        # design
+        "tab_design": "2 · Draw designs (optional)",
+        "design_setup_title": "Is a generator connected?",
+        "design_setup_hint": "Optional. Put an image provider's key in your .env "
+                             "(OPENAI_API_KEY or STABILITY_API_KEY) and stallkit can draw the "
+                             "artwork itself. Every image is billed by that provider, never by "
+                             "stallkit. Nothing here runs until a key is set.",
+        "design_check_setup": "Check the generator",
+        "design_list_styles": "Show the styles",
+        "design_draw_title": "Draw from your own ideas",
+        "design_draw_hint": "One concept per line. Each becomes a transparent PNG in "
+                            "2-PRODUCTS, named after the concept, so 'Upload products' can read "
+                            "it. Show the prompts first — that costs nothing.",
+        "design_concepts": "What to draw (one per line)",
+        "design_variants": "Images per idea",
+        "design_style": "Style",
+        "design_shape": "Shape",
+        "design_cutout": "If a design comes back with a solid background, cut it out "
+                         "(a guess — check the edges afterwards)",
+        "design_show_prompts": "Show the prompts",
+        "design_draw_now": "Draw them",
+        "design_market_title": "Let the market pick the subjects",
+        "design_market_hint": "Samples the listings Etsy ranks for a term and reads out the "
+                              "subjects worth drawing, keeping those that name a thing and "
+                              "dropping those that name a product or an offer. See the list "
+                              "before you spend anything.",
+        "design_keyword": "Search term",
+        "design_count": "How many ideas",
+        "design_show_concepts": "Show the ideas",
+        "design_need_concepts": "Type at least one idea, one per line.",
+        "design_need_keyword": "Type a search term first.",
+        "design_responsibility": "These are designs, not listings. Look at them, then use "
+                                 "'Upload products'. Generated imagery still has to be yours to "
+                                 "sell, and Etsy holds you to its policies on it.",
         "export_title": "Export listings",
         "export_hint": "Saves your listings as a spreadsheet you can edit and send back.",
         "which_listings": "Which listings",
@@ -218,6 +252,14 @@ STRINGS: dict[str, dict[str, str]] = {
         "confirm_upload": "Upload the new products in the folder to your shop as drafts?\n\n"
                           "They stay invisible until you publish them in Etsy.",
         "pick_csv": "Choose a CSV file first.",
+        # Spend, not safety: an image is billed the moment it is generated, and unlike a
+        # draft listing it cannot be undone by deleting the file.
+        "confirm_design": "Draw designs for {count} idea(s)?\n\nEvery image is charged by your "
+                          "image provider, not by stallkit. Use “Show the prompts” first if you "
+                          "are not sure.",
+        "confirm_design_keyword": "Research the term and draw the subjects it finds?\n\nEvery image "
+                                  "is charged by your image provider. “Show the ideas” costs "
+                                  "nothing but the research.",
         "confirm_push": "Send this file to your live Etsy shop?\n\nNew listings are created as drafts; "
                         "rows with a listing_id update that listing.",
         "confirm_ship": "Submit tracking for these orders?\n\nEtsy emails every buyer and marks the "
@@ -311,7 +353,7 @@ STRINGS: dict[str, dict[str, str]] = {
         "status_reconnect": "! Yeniden bağlan",
         "status_offline": "● Bağlantı yok",
         # drop
-        "tab_drop": "2 · Ürün yükle",
+        "tab_drop": "3 · Ürün yükle",
         "drop_folder_title": "Ürün klasörün",
         "drop_folder_hint": "2-PRODUCTS içinde her ürün için bir klasör aç ve fotoğraflarını istediğin "
                             "sırayla 01, 02, 03… diye adlandırıp içine koy. Klasörün adı ürünün adı olur.",
@@ -336,6 +378,39 @@ STRINGS: dict[str, dict[str, str]] = {
                             "ve review.csv dosyasını yazar. Etsy'ye hiçbir şey gönderilmez.",
         "prepare_mockups": "Hazırla",
         "preview_print_area": "Baskı alanını önizle",
+        # design
+        "tab_design": "2 · Tasarım çiz (isteğe bağlı)",
+        "design_setup_title": "Çizim motoru bağlı mı?",
+        "design_setup_hint": "İsteğe bağlı. .env dosyana bir görsel sağlayıcının anahtarını koy "
+                             "(OPENAI_API_KEY veya STABILITY_API_KEY); stallkit tasarımı kendisi "
+                             "çizebilir. Her görselin ücretini o sağlayıcı alır, stallkit değil. "
+                             "Anahtar yoksa burada hiçbir şey çalışmaz.",
+        "design_check_setup": "Motoru kontrol et",
+        "design_list_styles": "Stilleri göster",
+        "design_draw_title": "Kendi fikirlerinden çiz",
+        "design_draw_hint": "Her satıra bir fikir. Her biri 2-PRODUCTS içine şeffaf bir PNG "
+                            "olarak, fikrin adıyla kaydedilir; böylece 'Ürün yükle' onu "
+                            "okuyabilir. Önce istemleri göster — bu hiçbir şeye mal olmaz.",
+        "design_concepts": "Ne çizilecek (her satıra bir)",
+        "design_variants": "Fikir başına görsel",
+        "design_style": "Stil",
+        "design_shape": "Biçim",
+        "design_cutout": "Tasarım dolu zeminle gelirse zemini kes "
+                         "(bu bir tahmin — sonra kenarlarına bak)",
+        "design_show_prompts": "İstemleri göster",
+        "design_draw_now": "Çiz",
+        "design_market_title": "Konuları pazar seçsin",
+        "design_market_hint": "Etsy'nin bir terim için sıraladığı listingleri örnekler ve çizmeye "
+                              "değer konuları çıkarır; bir şeyi adlandıranları tutar, ürün ya da "
+                              "satış vaadi adlandıranları atar. Para harcamadan önce listeye bak.",
+        "design_keyword": "Arama terimi",
+        "design_count": "Kaç fikir",
+        "design_show_concepts": "Fikirleri göster",
+        "design_need_concepts": "En az bir fikir yaz, her satıra bir tane.",
+        "design_need_keyword": "Önce bir arama terimi yaz.",
+        "design_responsibility": "Bunlar tasarım, listing değil. Önce onlara bak, sonra 'Ürün "
+                                 "yükle'yi kullan. Üretilen görsellerin satış hakkı yine sana ait "
+                                 "olmak zorunda ve Etsy bu konuda seni kendi kurallarına tabi tutar.",
         # listings
         "tab_listings": "Listingler (CSV)",
         "export_title": "Listingleri dışa aktar",
@@ -429,6 +504,12 @@ STRINGS: dict[str, dict[str, str]] = {
         "confirm_upload": "Klasördeki yeni ürünler mağazana taslak olarak yüklensin mi?\n\n"
                           "Sen Etsy'de yayınlayana kadar görünmezler.",
         "pick_csv": "Önce bir CSV dosyası seç.",
+        "confirm_design": "{count} fikir için tasarım çizilsin mi?\n\nHer görselin ücretini görsel "
+                          "sağlayıcın alır, stallkit değil. Emin değilsen önce “İstemleri göster”i "
+                          "kullan.",
+        "confirm_design_keyword": "Terim araştırılıp bulunan konular çizilsin mi?\n\nHer görselin "
+                                  "ücretini görsel sağlayıcın alır. “Fikirleri göster” yalnızca "
+                                  "araştırma yapar, görsel üretmez.",
         "confirm_push": "Bu dosya canlı Etsy mağazana gönderilsin mi?\n\nYeni listingler taslak olarak "
                         "oluşturulur, listing_id'si olan satırlar o listingi günceller.",
         "confirm_ship": "Bu siparişlerin takip numaraları gönderilsin mi?\n\nEtsy her alıcıya e-posta atar "

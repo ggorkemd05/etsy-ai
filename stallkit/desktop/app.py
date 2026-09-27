@@ -98,6 +98,9 @@ class App:
 
         self.container: ttk.Frame | None = None
         self.log_text: tk.Text | None = None
+        # A multi-line box rather than a StringVar: one concept per line means a concept
+        # may contain spaces without the person quoting anything.
+        self.design_box: tk.Text | None = None
         self.log_buffer: list[tuple[str, str]] = []
         self.build()
         self._drain_after = self.root.after(40, self._drain)
@@ -136,6 +139,12 @@ class App:
             "since": "30d",
             "ship_csv": p.get("ship_csv", ""),
             "country": p.get("country", ""),
+            "design_concepts": "",
+            "design_variants": "2",
+            "design_style": "",
+            "design_shape": "square",
+            "design_keyword": "",
+            "design_count": "8",
             "keyword": "",
             "suggest_listing": "",
             "suggest_keyword": "",
@@ -151,6 +160,7 @@ class App:
             "show_secret": False,
             "use_inventory": bool(p.get("inventory_from")),
             "unshipped": True,
+            "design_cutout": False,
             "pin_sandbox": settings.current("PINTEREST_SANDBOX").lower() in {"1", "true", "yes"},
             "pin_ai": True,
             "anonymise": bool(self.app_prefs.get("anonymise", False)),
@@ -230,6 +240,7 @@ class App:
         self.notebook = ttk.Notebook(panes)
         for builder in (
             self._tab_setup,
+            self._tab_design,
             self._tab_drop,
             self._tab_listings,
             self._tab_orders,
@@ -561,6 +572,122 @@ class App:
             specs.append((self.t("remove_shop"), self.remove_shop))
         self._buttons(tools, *specs)
         self._note(tools, self.t("setup_tools_hint"))
+
+    def _tab_design(self, notebook: ttk.Notebook) -> None:
+        """Generating the artwork. Sits before Upload products, which is the next step."""
+        from ..design import prompts as prompts_mod
+
+        tab = self._tab(notebook, self.t("tab_design"))
+
+        setup = self._section(tab, self.t("design_setup_title"), self.t("design_setup_hint"))
+        self._buttons(
+            setup,
+            (self.t("design_check_setup"), lambda: self.run(["design", "status"])),
+            (self.t("design_list_styles"), lambda: self.run(["design", "styles"])),
+        )
+
+        draw = self._section(tab, self.t("design_draw_title"), self.t("design_draw_hint"))
+        row = self._row(draw)
+        ttk.Label(draw, text=self.t("design_concepts")).grid(
+            row=row, column=0, sticky="nw", padx=(0, 10), pady=3
+        )
+        self.design_box = tk.Text(draw, height=5, width=48, wrap="word")
+        self.design_box.grid(row=row, column=1, columnspan=2, sticky="ew", pady=3)
+        self.design_box.insert("1.0", self.vars["design_concepts"].get())
+
+        self._field(draw, self.t("design_variants"), "design_variants", width=8)
+        row = self._row(draw)
+        ttk.Label(draw, text=self.t("design_style")).grid(row=row, column=0, sticky="w", padx=(0, 10))
+        ttk.Combobox(
+            draw,
+            textvariable=self.vars["design_style"],
+            values=("", *prompts_mod.STYLES),
+            width=16,
+        ).grid(row=row, column=1, sticky="w")
+        row = self._row(draw)
+        ttk.Label(draw, text=self.t("design_shape")).grid(row=row, column=0, sticky="w", padx=(0, 10))
+        ttk.Combobox(
+            draw,
+            textvariable=self.vars["design_shape"],
+            values=("square", "portrait", "landscape"),
+            state="readonly",
+            width=16,
+        ).grid(row=row, column=1, sticky="w")
+        ttk.Checkbutton(
+            draw, text=self.t("design_cutout"), variable=self.vars["design_cutout"]
+        ).grid(row=self._row(draw), column=0, columnspan=3, sticky="w", pady=(6, 0))
+        self._buttons(
+            draw,
+            (self.t("design_show_prompts"), lambda: self.draw_designs(dry_run=True)),
+            (self.t("design_draw_now"), lambda: self.draw_designs(dry_run=False)),
+            primary=1,
+        )
+
+        market = self._section(tab, self.t("design_market_title"), self.t("design_market_hint"))
+        self._field(market, self.t("design_keyword"), "design_keyword", width=32)
+        self._field(market, self.t("design_count"), "design_count", width=8)
+        self._buttons(
+            market,
+            (self.t("design_show_concepts"), lambda: self.draw_from_keyword(dry_run=True)),
+            (self.t("design_draw_now"), lambda: self.draw_from_keyword(dry_run=False)),
+            primary=1,
+        )
+
+        self._note(tab, self.t("design_responsibility"))
+
+    def _design_concepts(self) -> list[str]:
+        """One concept per line, so a concept may contain spaces without quoting."""
+        raw = self.design_box.get("1.0", "end") if self.design_box is not None else ""
+        self.vars["design_concepts"].set(raw.strip())
+        return [line.strip() for line in raw.splitlines() if line.strip()]
+
+    def _design_options(self) -> list[str]:
+        args = []
+        variants = self.vars["design_variants"].get().strip()
+        if variants:
+            args += ["--variants", variants]
+        style = self.vars["design_style"].get().strip()
+        if style:
+            args += ["--style", style]
+        shape = self.vars["design_shape"].get().strip()
+        if shape:
+            args += ["--shape", shape]
+        return args
+
+    def draw_designs(self, *, dry_run: bool) -> None:
+        concepts = self._design_concepts()
+        if not concepts:
+            messagebox.showinfo(self.t("app_title"), self.t("design_need_concepts"))
+            return
+        args = ["design", "new", *concepts, *self._design_options(), *self._ws_args()]
+        if self.vars["design_cutout"].get():
+            args.append("--cutout")
+        if dry_run:
+            self.run([*args, "--dry-run"])
+            return
+        # Every image is billed by the provider, so this is a spend confirmation, not a
+        # safety one — and unlike a draft listing it cannot be undone by deleting a file.
+        if not messagebox.askyesno(
+            self.t("app_title"), self.t("confirm_design").format(count=len(concepts))
+        ):
+            return
+        self.run([*args, "--yes"])
+
+    def draw_from_keyword(self, *, dry_run: bool) -> None:
+        keyword = self.vars["design_keyword"].get().strip()
+        if not keyword:
+            messagebox.showinfo(self.t("app_title"), self.t("design_need_keyword"))
+            return
+        args = ["design", "from-keyword", keyword, *self._design_options(), *self._ws_args()]
+        count = self.vars["design_count"].get().strip()
+        if count:
+            args += ["--designs", count]
+        if dry_run:
+            self.run([*args, "--dry-run"])
+            return
+        if not messagebox.askyesno(self.t("app_title"), self.t("confirm_design_keyword")):
+            return
+        self.run([*args, "--yes"])
 
     def _tab_drop(self, notebook: ttk.Notebook) -> None:
         tab = self._tab(notebook, self.t("tab_drop"))

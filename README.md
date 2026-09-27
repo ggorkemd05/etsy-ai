@@ -71,8 +71,9 @@ is measured from the listings Etsy actually returns for a term.
 | Windows 10 / 11 | `stallkit-…-windows.exe` — one file, nothing to install |
 | Mac with Apple Silicon (M1 and newer) | `stallkit-…-macos.zip` — unzip, move `stallkit.app` to Applications |
 
-No Python needed. The window has a tab for each part of the tool — **Setup**, **Upload
-products** (`drop`), **Listings**, **Orders**, **SEO** and **Pinterest** — and a log at
+No Python needed. The window has a tab for each part of the tool — **Setup**, **Draw
+designs** (`design`, optional), **Upload products** (`drop`), **Listings**, **Orders**,
+**SEO** and **Pinterest** — and a log at
 the bottom that shows exactly what ran and what came back. Every button runs the same
 command documented below, so everything in this README applies to the app too. The
 window is in English and Turkish and follows your system language.
