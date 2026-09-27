@@ -44,9 +44,23 @@ git clone https://github.com/MoneyPrintLabs/etsyprinting.git
 cd etsyprinting
 python -m venv .venv
 source .venv/bin/activate       # Windows: .venv\Scripts\activate
+python -m pip install --upgrade pip
 pip install -e .
 stallkit --version
 ```
+
+Do not skip the pip upgrade. `pip install -e .` on this project needs pip 21.3 or newer
+(PEP 660 editable installs, because the build backend is hatchling, not setuptools), and
+the Python Apple ships with macOS gives every new venv pip 21.2.3. With that pip the
+install stops immediately:
+
+```
+ERROR: File "setup.py" or "setup.cfg" not found. Directory cannot be installed in
+editable mode
+```
+
+That message names the wrong culprit — nothing is missing from the repo, the pip reading it
+is simply too old.
 
 ### 3. Have an Etsy shop
 
@@ -237,7 +251,19 @@ Tüm listeyi tek tek gezer, programın kontrol edemeyeceği kısımları sana so
 
 ## Adımlar
 
-**1–2.** Depoyu klonla, sanal ortam kur, `pip install -e .`, `stallkit --version` ile doğrula.
+**1–2.** Depoyu klonla, sanal ortam kur, **`python -m pip install --upgrade pip`**, sonra
+`pip install -e .`, `stallkit --version` ile doğrula.
+
+Pip güncellemesini atlama. `pip install -e .` bu projede pip 21.3 veya üstünü istiyor (PEP
+660; projenin derleyicisi setuptools değil, hatchling). macOS ile gelen Python ise her yeni
+sanal ortama pip 21.2.3 koyuyor. O pip ile kurulum daha başlamadan duruyor:
+
+```
+ERROR: File "setup.py" or "setup.cfg" not found. Directory cannot be installed in
+editable mode
+```
+
+Bu mesaj suçluyu yanlış gösteriyor: depoda eksik bir şey yok, mesajı yazan pip fazla eski.
 
 **3.** Etsy mağazan yoksa önce <https://www.etsy.com/sell> adresinden aç. Bu araç var olan
 bir mağaza üzerinde çalışır ve **hiçbir şeyi yayınlamaz** — hepsi taslak kalır.

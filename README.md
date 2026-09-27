@@ -153,8 +153,15 @@ git clone https://github.com/MoneyPrintLabs/etsyprinting.git
 cd etsyprinting
 python -m venv .venv
 source .venv/bin/activate       # Windows: .venv\Scripts\activate
+python -m pip install --upgrade pip
 pip install -e .
 ```
+
+The pip upgrade is not a formality. `pip install -e .` on a project built with hatchling
+needs pip 21.3 or newer (PEP 660), and the Python that ships with macOS creates venvs with
+pip 21.2.3 — so on a Mac the install fails before it starts, with `File "setup.py" or
+"setup.cfg" not found. Directory cannot be installed in editable mode`. One upgrade and it
+is gone.
 
 Check it:
 
