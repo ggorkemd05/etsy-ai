@@ -36,6 +36,8 @@ stallkit seo keywords "ceramic mug"           # what actually ranks, and why
 - [First run](#first-run)
 - [Several shops](#several-shops)
 - [Bulk listings](#bulk-listings)
+- [Digital downloads](#digital-downloads)
+- [Generating the designs](#generating-the-designs)
 - [Orders and tracking](#orders-and-tracking)
 - [SEO](#seo)
 - [Pinterest (optional)](#pinterest-optional)
@@ -317,6 +319,7 @@ One row per listing. Two rules:
 | `tags` | — | Max 13, each max 20 chars |
 | `materials` | — | Max 13 |
 | `images` | — | Paths **relative to the CSV file**, in display order |
+| `files` | — | Buyer downloads for a digital listing. Max 5. See [Digital downloads](#digital-downloads) |
 | `state` | — | Update only: `active` or `inactive` |
 
 Get the IDs you need:
@@ -441,9 +444,10 @@ CSV-only review workflow and now also understands ready-photo folders.
   saved listing ID in the history and complete that draft in Etsy; only reset its
   history entry after confirming no draft was created. A stale `.auto-upload.lock`
   may be removed only after confirming the previous process is stopped.
-- Automatic upload supports physical-product templates. The template listing's
+- Automatic upload supports physical and digital templates. The template listing's
   variations (options, prices, quantities, processing profile) are copied onto every
-  draft. Digital delivery file uploads are not implemented. Source files remain in
+  draft. For a digital template the buyer's file comes from the design itself or from a
+  `files` subfolder — see [Digital downloads](#digital-downloads). Source files remain in
   place; there is no automatic archive move.
 
 ### Compositing loose designs
@@ -539,6 +543,134 @@ Two things it will tell you rather than hide:
 
 The drop flow never writes a `listing_id`, and Etsy only accepts a state change on an
 update — so it is structurally incapable of publishing anything.
+
+---
+
+## Digital downloads
+
+A digital listing is a listing whose `type` is `download` (or `both`, if you also ship
+a physical version). What the buyer pays for goes in the `files` column:
+
+```csv
+listing_id,title,type,files,images,...
+,Pressed Eucalyptus Printable Wall Art,download,prints/eucalyptus-a2.pdf|prints/eucalyptus-a3.pdf,mockups/eucalyptus-framed.jpg,...
+```
+
+Paths are relative to the CSV, like `images`. Etsy allows **five files per listing** at
+**20MB each**, and takes `.pdf`, `.zip`, `.png`, `.jpg`, documents, audio and `.stl`
+among others — anything else goes inside a `.zip`. All of that is checked locally, before
+the draft exists, because Etsy attaches files only *after* the listing is created and
+stallkit holds no delete scope to undo one.
+
+Two things worth knowing:
+
+- **A digital draft with no file attached cannot be published.** `push` says so as a
+  warning rather than an error, so you can stage 300 drafts now and attach the files
+  later, but the warning is the one to read.
+- **`files` is never written by `listings pull`.** Etsy hands back a file id and name,
+  not a path on your disk, so a round-tripped row cannot attach a second copy of a
+  download the listing already has.
+
+### Digital products through `drop`
+
+If your template listing is digital, the `drop` flow fills the `files` column for you:
+
+- A **loose design** in `2-PRODUCTS` is its own download. The mockups become the
+  shop-window images and the artwork itself is what the buyer gets — which is exactly
+  the printable-wall-art shape.
+- A **ready-photo product folder** has to nominate its files, because its images are
+  photographs. Put them in a `files` subfolder:
+
+```text
+2-PRODUCTS/
+  pressed eucalyptus print/
+    01-framed.jpg
+    02-detail.jpg
+    files/
+      eucalyptus-a2.pdf
+      eucalyptus-a3.pdf
+```
+
+A product with nothing to hand over is **skipped**, not turned into an unpublishable
+draft — and because `drop auto` stops on any skipped product, it cannot create one.
+
+---
+
+## Generating the designs
+
+Optional, and off unless you configure it: `stallkit design` draws the artwork with an
+image model and writes it straight into `2-PRODUCTS`, where `drop` already knows what to
+do with it.
+
+```bash
+stallkit design status                                   # what is configured, if anything
+stallkit design new "pressed eucalyptus leaf" -n 4       # four variants of one concept
+stallkit design new "retro surf sunset" --style vintage --shape portrait
+stallkit drop auto --dry-run                             # from here it is the normal flow
+```
+
+**Setup, once.** Put one key in `.env`. Nothing here runs, and nothing is billed, until
+you do:
+
+```bash
+OPENAI_API_KEY=...        # returns transparent PNGs directly
+STABILITY_API_KEY=...     # generates opaque, then cuts out in a second billed call
+```
+
+Set both and stallkit refuses to choose, because an image costs money at either — name
+one with `STALLKIT_IMAGE_PROVIDER`.
+
+### What it will and will not do
+
+**Transparency is the whole point, not a setting.** `drop` decides whether to composite a
+file onto a mockup by asking whether it has see-through pixels. A design generated on an
+opaque white square is therefore not "a design with a white background" — it is a
+finished product photo as far as the pipeline is concerned, and it will be uploaded as a
+listing image instead. So every prompt asks for a cut-out, the result is *checked*, and a
+design that came back opaque says so on its row. `--cutout` will flood-fill the flat
+border away locally, which is a guess and off by default: it can eat a white dress.
+
+**Text is off by default.** Generated lettering is usually misspelled, and a misspelled
+print is a refund. `--with-text` if you want typography anyway.
+
+**The filename is the interface.** Designs are named from the concept that drew them
+(`pressed-eucalyptus-leaf-1.png`), because that is what `drop` reads the product concept
+out of. The trailing counter is dropped when it is read back, so every variant is the
+same concept.
+
+**Every run records where it came from.** `ai-designs.json` beside the workspace folders
+keeps the concept, the full prompt and the provider for each file. Months later that is
+the only answer to "where did this design come from", and a marketplace dispute asks
+exactly that.
+
+### Letting the market pick the subjects
+
+```bash
+stallkit design from-keyword "botanical wall art" --designs 8 --dry-run
+```
+
+This samples the listings Etsy ranks for the term, reads the recurring phrases that name
+a *subject* rather than a product or an offer, and draws those. "pressed eucalyptus leaf"
+survives the filter; "instant download", "wall art print" and "gift for her" do not.
+
+Research never enters the image prompt, deliberately. Those phrases are how a listing is
+*sold*; an image model reads them as things to draw and puts the words on the artwork. So
+market data chooses *what* to draw and the prompt only ever describes the picture. A
+keyword whose titles are all product words yields no concepts and says so, rather than
+inventing some.
+
+### Before you sell any of it
+
+- **You are the seller of record.** Generated imagery still has to be yours to sell, and
+  Etsy holds you to its policies on it — including declaring a production partner for
+  print-on-demand. stallkit copies that declaration from your template listing; set it up
+  correctly on the listing you build by hand.
+- **Disclose it where it is asked for.** `stallkit pinterest queue --ai-modified` sets
+  Pinterest's disclosure for AI-created imagery.
+- **Styles here never name a living artist.** Imitating one is refused by most providers
+  and is a problem at Etsy. `--style` takes your own words too; that is on you.
+- **Costs are stated before they are spent.** `--dry-run` prints the prompts and the image
+  count and calls nothing. Without `--yes`, a real run asks first.
 
 ---
 
@@ -713,6 +845,10 @@ Task Scheduler or cron.
 | `stallkit drop run` | Designs → mockups, titles, tags → `review.csv` |
 | `stallkit drop calibrate` | Move a mockup's print area, with a preview image to check it |
 | `stallkit drop auto` | Product folders → prepared copy and images → Etsy drafts, with upload history |
+| `stallkit design new` | Draw designs with an image model, into the drop folder |
+| `stallkit design from-keyword` | Read drawable subjects off ranking listings, then draw them |
+| `stallkit design styles` | The named styles `--style` accepts |
+| `stallkit design status` | Which image generator is configured, if any |
 | `stallkit listings template` | Write a starter CSV |
 | `stallkit listings pull` | Export listings to CSV |
 | `stallkit listings push` | Bulk create/update from CSV |
@@ -829,8 +965,8 @@ Issues and pull requests welcome — see **[CONTRIBUTING.md](CONTRIBUTING.md)** 
 the rules that matter, and where help would go furthest. You need no Etsy account and no
 network connection to contribute: the whole test suite is offline by design.
 
-Useful directions: bulk inventory edits on existing listings, digital
-downloads, shop section management, listing translations, and a renewal helper.
+Useful directions: bulk inventory edits on existing listings, shop section management,
+listing translations, and a renewal helper.
 
 - **[SECURITY.md](SECURITY.md)** — what stallkit stores, where, and how to report a
   vulnerability privately

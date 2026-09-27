@@ -23,6 +23,8 @@ from . import setup as setup_mod
 from . import shops as shops_mod
 from .client import EtsyClient
 from .config import Config, home_dir, split_credential, token_path, write_env_file
+from .design import concepts as concepts_mod
+from .design import prompts, providers, studio
 from .drop import automation, pipeline
 from .drop import mockup as mockup_mod
 from .drop import template as template_mod
@@ -95,6 +97,10 @@ seo_app = typer.Typer(help="Audit your listings and research the market.", no_ar
 drop_app = typer.Typer(
     help="Drop designs in a folder, get a ready-to-push listing CSV.", no_args_is_help=True
 )
+design_app = typer.Typer(
+    help="Optional: draw the designs themselves with an image model, into the drop folder.",
+    no_args_is_help=True,
+)
 
 app.add_typer(auth_app, name="auth")
 app.add_typer(shop_app, name="shop")
@@ -102,6 +108,7 @@ app.add_typer(listings_app, name="listings")
 app.add_typer(orders_app, name="orders")
 app.add_typer(seo_app, name="seo")
 app.add_typer(drop_app, name="drop")
+app.add_typer(design_app, name="design")
 pinterest_app = typer.Typer(
     help="Optional: queue Pins for your published listings on your own Pinterest account.",
     no_args_is_help=True,
@@ -1599,6 +1606,260 @@ def drop_auto(
         _warn(f"Needs Etsy review before retrying: {item}")
     if report.needs_review or report.uploaded.errors or report.uploaded.partial:
         raise typer.Exit(1)
+
+
+# ---------------------------------------------------------------- design
+
+
+def _design_target(path: Optional[Path], out: Optional[Path]) -> Path:
+    """Where generated designs land: 2-PRODUCTS by default, so `drop` finds them."""
+    if out is not None:
+        return Path(out)
+    return _workspace(path).require().products
+
+
+def _print_design_batch(batch: studio.DesignBatch) -> None:
+    for result in batch.results:
+        if result.error:
+            err_console.print(f"[red]{CROSS}[/] {result.concept} — {result.error}")
+            continue
+        assert result.path is not None
+        console.print(f"[green]{TICK}[/] {result.path.name} [dim]— {result.concept}[/]")
+        for warning in result.warnings:
+            console.print(f"    [yellow]![/] {warning}")
+
+
+def _design_reminders() -> None:
+    console.print(
+        "\n[dim]These files are artwork, not listings. Check them, then run "
+        "[cyan]stallkit drop auto --dry-run[/][dim].\n"
+        "You are the seller of record: generated imagery still has to be yours to sell, "
+        "and Etsy holds you to its policies on it. When you Pin these, declare them with "
+        "[cyan]stallkit pinterest queue --ai-modified[/][dim].[/]"
+    )
+
+
+@design_app.command("new")
+def design_new(
+    concepts: list[str] = typer.Argument(
+        ..., help="What to draw, in words. One concept per argument, quoted."
+    ),
+    variants: int = typer.Option(1, "--variants", "-n", help="Images per concept."),
+    style: str = typer.Option(
+        "", "--style", help=f"A named style ({', '.join(prompts.STYLES)}) or your own words."
+    ),
+    shape: str = typer.Option("square", "--shape", help="square, portrait or landscape."),
+    with_text: bool = typer.Option(
+        False,
+        "--with-text",
+        help="Allow lettering. Off by default: generated text is usually misspelled, and "
+        "a misspelled print is a refund.",
+    ),
+    extra: str = typer.Option("", "--extra", help="Appended to every prompt verbatim."),
+    cutout_opaque: bool = typer.Option(
+        False,
+        "--cutout",
+        help="If a design comes back opaque, remove its flat background locally. "
+        "Off by default — it is a guess, and it can eat a white part of the design.",
+    ),
+    path: Optional[Path] = typer.Option(None, "--path", help="Etsy Studio folder."),
+    out: Optional[Path] = typer.Option(
+        None, "--out", "-o", help="Write designs here instead of 2-PRODUCTS."
+    ),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show the prompts and what it would cost. Generates nothing."
+    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Do not ask for confirmation."),
+) -> None:
+    """Draw designs with an image model, named so `drop` can read them."""
+    if shape not in providers.SHAPES:
+        _fail(f"--shape must be one of {', '.join(providers.SHAPES)}.")
+        raise typer.Exit(1)
+
+    planned = studio.plan(
+        list(concepts), variants=variants, style=style, with_text=with_text, extra=extra
+    )
+
+    if dry_run:
+        for concept, prompt in planned[: len(concepts)]:
+            console.print(f"[bold]{concept}[/]\n  [dim]{prompt}[/]\n")
+        _ok(
+            f"Dry run: {len(planned)} image(s) across {len(concepts)} concept(s). "
+            "Nothing was generated and nothing was billed."
+        )
+        return
+
+    config = providers.DesignConfig.load()
+    provider = config.build()
+    target = _design_target(path, out)
+
+    if not yes:
+        console.print(
+            Panel(
+                f"About to generate [bold]{len(planned)}[/] image(s) with "
+                f"[bold]{provider.name}[/], into {target}.\n"
+                "Each image is billed by the provider, and a generation that is refused "
+                "for content may still take a moment of your quota.",
+                title="Confirm",
+                border_style="yellow",
+            )
+        )
+        if not typer.confirm("Proceed?"):
+            _warn("Cancelled. Nothing was generated.")
+            provider.close()
+            raise typer.Exit(1)
+
+    try:
+        with console.status("Drawing…") as status:
+            batch = studio.generate(
+                provider,
+                list(concepts),
+                target,
+                variants=variants,
+                style=style,
+                shape=shape,
+                with_text=with_text,
+                extra=extra,
+                cut_out=cutout_opaque,
+                manifest_dir=target.parent if out is None else target,
+                on_progress=lambda message: status.update(message),
+            )
+    finally:
+        provider.close()
+
+    console.print()
+    _print_design_batch(batch)
+    console.print()
+    _ok(f"{len(batch.made)} design(s) written to {target}; {len(batch.failed)} failed.")
+    if batch.manifest_path:
+        console.print(f"[dim]Prompt and provider recorded in {batch.manifest_path}[/]")
+    if batch.made:
+        _design_reminders()
+    if batch.failed:
+        raise typer.Exit(1)
+
+
+@design_app.command("from-keyword")
+def design_from_keyword(
+    keyword: str = typer.Argument(..., help="A term buyers search, e.g. 'botanical wall art'."),
+    designs: int = typer.Option(8, "--designs", help="How many concepts to read from the market."),
+    variants: int = typer.Option(1, "--variants", "-n", help="Images per concept."),
+    style: str = typer.Option("", "--style", help="A named style or your own words."),
+    shape: str = typer.Option("square", "--shape", help="square, portrait or landscape."),
+    sample: int = typer.Option(200, "--sample", help="Listings to sample for the research."),
+    path: Optional[Path] = typer.Option(None, "--path", help="Etsy Studio folder."),
+    out: Optional[Path] = typer.Option(None, "--out", "-o", help="Write designs here."),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Research and show the concepts. Generates nothing."
+    ),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Do not ask for confirmation."),
+) -> None:
+    """Read drawable subjects off the listings that rank for a term, then draw them.
+
+    The research decides *what* is worth drawing; it never goes into the image prompt.
+    'gift for her' is how a listing is sold, and a model asked to draw it writes the
+    words onto the artwork.
+    """
+    # Keyword research needs the key only, so this works before the shop is connected.
+    with _client(require_auth=False) as client:
+        with console.status(f"Sampling listings for {keyword!r}…"):
+            report = seo_mod.research(client, keyword, sample=sample)
+
+    found, warnings = concepts_mod.from_research(report, limit=designs)
+    for warning in warnings:
+        _warn(warning)
+    if not found:
+        raise typer.Exit(1)
+
+    console.print(
+        f"\n{len(found)} subject(s) read from {report.sampled} listing(s) ranking for "
+        f"{_hide(keyword)}:"
+    )
+    for concept in found:
+        console.print(f"  {BULLET} {concept}")
+    console.print()
+
+    if dry_run:
+        _ok(
+            f"Dry run: {len(found) * variants} image(s) would be generated. "
+            "Nothing was billed."
+        )
+        return
+
+    config = providers.DesignConfig.load()
+    provider = config.build()
+    target = _design_target(path, out)
+
+    if not yes:
+        if not typer.confirm(
+            f"Generate {len(found) * variants} image(s) with {provider.name} into {target}?"
+        ):
+            _warn("Cancelled. Nothing was generated.")
+            provider.close()
+            raise typer.Exit(1)
+
+    try:
+        with console.status("Drawing…") as status:
+            batch = studio.generate(
+                provider,
+                found,
+                target,
+                variants=variants,
+                style=style,
+                shape=shape,
+                manifest_dir=target.parent if out is None else target,
+                on_progress=lambda message: status.update(message),
+            )
+    finally:
+        provider.close()
+
+    console.print()
+    _print_design_batch(batch)
+    console.print()
+    _ok(f"{len(batch.made)} design(s) written to {target}; {len(batch.failed)} failed.")
+    if batch.made:
+        _design_reminders()
+    if batch.failed:
+        raise typer.Exit(1)
+
+
+@design_app.command("styles")
+def design_styles() -> None:
+    """List the named styles `--style` accepts."""
+    table = Table("style", "what it asks for", box=None, padding=(0, 2, 0, 0))
+    for name, clause in prompts.STYLES.items():
+        table.add_row(f"[cyan]{name}[/]", clause)
+    console.print(table)
+    console.print(
+        "\n[dim]--style also takes your own words. No style here names a living artist: "
+        "imitating one is refused by most providers and is a problem at Etsy.[/]"
+    )
+
+
+@design_app.command("status")
+def design_status() -> None:
+    """Show which image generator is configured, without generating anything."""
+    config = providers.DesignConfig.load()
+    if not config.provider:
+        _warn("No image generator configured. `stallkit design new` would stop and say so.")
+        console.print(
+            "  Put a key in .env to switch it on:\n"
+            "    [cyan]OPENAI_API_KEY[/]=...      transparent PNGs directly\n"
+            "    [cyan]STABILITY_API_KEY[/]=...   transparent via a second cut-out call\n"
+            "  Nothing else in stallkit needs either."
+        )
+        return
+    provider = config.build()
+    _ok(f"Provider: {provider.name}")
+    if config.provider == "openai":
+        console.print(f"  model: {config.openai_model}")
+    if config.provider == "stability":
+        console.print("  [dim]Each design is two billed calls: generate, then cut out.[/]")
+    console.print(
+        f"  transparent output: {'yes' if provider.returns_transparency else 'no'}\n"
+        f"  designs land in: {_workspace(None).products}"
+    )
+    provider.close()
 
 
 # --- pinterest -----------------------------------------------------------------

@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Digital downloads.** A `files` column on the listing CSV attaches what the buyer
+  downloads, and `type` may now be `download` or `both`. Etsy accepts a file only after
+  the listing exists, so every refusal it would make is checked first: the type, Etsy's
+  five-files-per-listing and 20MB-per-file ceilings, and the suffixes it takes. A failure
+  after the draft exists is reported `partial`, with the fact that the listing cannot be
+  published until a file is attached — stallkit holds no delete scope, so saying so is all
+  it can do. A digital draft with no file is a warning rather than an error, because
+  staging drafts and attaching files later is a real way to work. `listings pull` never
+  writes a path into `files`: Etsy returns a file id, not a local file, and a
+  round-tripped row must not attach a second copy of a download the listing already has.
+- **Digital products through `drop`.** `drop auto` no longer refuses a digital template.
+  A loose design is its own download — the artwork the mockups were built from is exactly
+  what a printable-wall-art buyer pays for — while a ready-photo folder nominates its
+  files in a `files` subfolder, because its images are photographs. A product with nothing
+  to hand over is skipped with the reason, so an unpublishable draft cannot be created.
+- **`stallkit design` — generating the artwork itself.** Optional and off unless an image
+  provider key is in `.env`; OpenAI and Stability AI are supported, and nothing else in
+  stallkit imports the package. Designs are written into `2-PRODUCTS`, named from the
+  concept that drew them, so `drop` reads the concept back out of the filename and the
+  rest of the pipeline never learns that a design was generated.
+  - Transparency is treated as load-bearing rather than cosmetic: `drop` routes a file by
+    whether it has see-through pixels, so an opaque design would be uploaded as a finished
+    product photo instead of being composited. Every prompt asks for a cut-out, the result
+    is verified, and a design that came back opaque says so. `--cutout` removes a flat
+    background locally, off by default because it is a guess.
+  - Lettering is off unless asked for: generated text is usually misspelled, and a
+    misspelled print is a refund.
+  - `design from-keyword` reads the subjects worth drawing off the listings Etsy ranks for
+    a term, keeping phrases that name a subject and discarding those that name a product
+    or an offer. The research never enters the image prompt — "gift for her" is how a
+    listing is sold, and a model asked to draw it writes the words onto the artwork.
+  - Costs are stated before they are spent: `--dry-run` prints the prompts and the count
+    and calls nothing, a real run confirms first, a refused prompt is never retried, and
+    one failure does not lose the images already paid for.
+  - `ai-designs.json` records the concept, the full prompt and the provider for every
+    file, because months later that is the only answer to where a design came from.
+
 ## [0.2.0] — 2026-09-26
 
 ### Added
