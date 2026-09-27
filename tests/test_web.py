@@ -494,3 +494,72 @@ def test_an_unknown_path_is_a_clean_404(running):
     status, payload = request(running, "/api/nothing", token=running.token)
     assert status == 404
     assert payload["error"]
+
+
+# --- starting up ------------------------------------------------------------------
+
+
+def test_a_taken_port_points_at_the_server_already_running(running):
+    """The likeliest holder of the port is an earlier `stallkit web`, still working.
+
+    Telling someone to pick another port first would have them run a second server
+    against one shop when the answer was to switch terminal tabs.
+    """
+    from stallkit.errors import StallKitError
+
+    with pytest.raises(StallKitError) as caught:
+        web.build(running.port)
+    message = str(caught.value)
+    assert "already have `stallkit web` running" in message
+    assert f"--port {running.port + 1}" in message
+
+
+def test_nothing_claims_to_be_serving_until_the_port_is_bound(monkeypatch):
+    """A green "serving on 8479" above "address already in use" is worse than the error
+    alone, so `announce` must not run when the bind fails."""
+    import socket as socket_module
+
+    from stallkit.errors import StallKitError
+
+    holder = socket_module.socket()
+    holder.bind(("127.0.0.1", 0))
+    holder.listen(1)
+    taken = holder.getsockname()[1]
+    announced = []
+    try:
+        with pytest.raises(StallKitError):
+            web.serve(taken, open_browser=False, announce=announced.append)
+    finally:
+        holder.close()
+    assert announced == []
+
+
+def test_announce_reports_the_port_that_was_actually_bound():
+    # Asked for 0, the OS picks one. Echoing the request rather than the result would
+    # print an address that goes nowhere.
+    seen = []
+
+    def stop_immediately(app):
+        seen.append(app)
+        raise KeyboardInterrupt
+
+    web.serve(0, open_browser=False, announce=stop_immediately)
+    assert seen and seen[0].port != 0
+    assert f":{seen[0].port}/" in seen[0].url()
+    assert seen[0].token in seen[0].url()
+
+
+def test_a_failure_while_starting_still_frees_the_port_and_the_worker():
+    """Interrupted before it served, it must not leave the port held by a server nobody
+    can reach — the next run would report that port as taken and be unable to explain it."""
+    captured = []
+
+    def fail_immediately(app):
+        captured.append(app)
+        raise KeyboardInterrupt
+
+    web.serve(0, open_browser=False, announce=fail_immediately)
+    app = captured[0]
+    assert web.port_is_free(app.port)
+    # The job worker is a thread; leaking one per failed start would pile up silently.
+    assert not app.runner._thread.is_alive()

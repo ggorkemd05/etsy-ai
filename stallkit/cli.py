@@ -498,21 +498,23 @@ def web(
     from .web import server as web_server
 
     chosen = port if port is not None else web_server.default_port()
-    console.print(
-        Panel(
-            f"{TICK} Serving on [cyan]127.0.0.1:{chosen}[/] — this machine only.\n"
-            "The address below carries a one-time token. Anything without it is refused,\n"
-            "so another program or another tab cannot drive your shop.\n"
-            "[dim]Stop it with Ctrl+C.[/]",
-            title="stallkit web",
-            border_style="green",
+
+    def announce(running: web_server.WebApp) -> None:
+        # Printed from inside serve(), after the port is bound. Claiming to serve before
+        # the bind would put a green tick directly above "address already in use".
+        console.print(
+            Panel(
+                f"{TICK} Serving on [cyan]127.0.0.1:{running.port}[/] — this machine only.\n"
+                "The address below carries a one-time token. Anything without it is refused,\n"
+                "so another program or another tab cannot drive your shop.\n"
+                "[dim]Stop it with Ctrl+C.[/]",
+                title="stallkit web",
+                border_style="green",
+            )
         )
-    )
-    web_server.serve(
-        chosen,
-        open_browser=not no_browser,
-        announce=lambda url: console.print(f"\n  [bold cyan]{url}[/]\n"),
-    )
+        console.print(f"\n  [bold cyan]{running.url()}[/]\n")
+
+    web_server.serve(chosen, open_browser=not no_browser, announce=announce)
     _ok("Stopped.")
 
 

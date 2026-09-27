@@ -490,9 +490,15 @@ def build(port: int = DEFAULT_PORT, *, token: str = "") -> tuple[_Server, WebApp
         server = _Server(("127.0.0.1", port), handler)
     except OSError as exc:
         app.runner.stop()
+        # The likeliest holder of this port is another `stallkit web` from an earlier
+        # terminal tab, and that one is still working — so say so before suggesting a
+        # second copy. Starting one on another port is fine, but two servers driving one
+        # shop is not what anybody wanted.
         raise StallKitError(
-            f"Cannot listen on 127.0.0.1:{port} ({exc}). "
-            f"Something else holds that port — pass --port to pick another."
+            f"Cannot listen on 127.0.0.1:{port} ({exc}).\n"
+            "If you already have `stallkit web` running in another window, that one is "
+            "still serving — switch to it and use the address it printed.\n"
+            f"Otherwise something else holds the port: `stallkit web --port {port + 1}`."
         ) from exc
     app.port = server.server_address[1]
     return server, app
@@ -502,26 +508,40 @@ def serve(
     port: int = DEFAULT_PORT,
     *,
     open_browser: bool = True,
-    announce: Callable[[str], None] | None = None,
+    announce: Callable[[WebApp], None] | None = None,
 ) -> None:
-    """Run until interrupted. Blocks; the caller is a CLI command."""
-    server, app = build(port)
-    address = app.url()
-    if announce:
-        announce(address)
-    if open_browser:
-        import webbrowser
+    """Run until interrupted. Blocks; the caller is a CLI command.
 
-        try:
-            webbrowser.open(address)
-        except Exception:  # noqa: BLE001 — headless box: the printed URL is the fallback
-            pass
+    `announce` runs only after the port is actually bound, and it is given the app so it
+    can report the port that was taken rather than the one that was asked for. Nothing
+    may claim to be serving before the bind: a green "serving on 8479" followed by
+    "address already in use" is a worse first five minutes than the error alone.
+    """
+    server, app = build(port)
+    # Everything past the bind is inside the cleanup, including announcing and opening
+    # the browser: a failure there would otherwise leave the port held and the worker
+    # thread alive, and the next `stallkit web` would report the port as taken by a
+    # server nobody can reach.
+    serving = False
     try:
+        if announce:
+            announce(app)
+        if open_browser:
+            import webbrowser
+
+            try:
+                webbrowser.open(app.url())
+            except Exception:  # noqa: BLE001 — headless box: the printed URL is the fallback
+                pass
+        serving = True
         server.serve_forever(poll_interval=0.4)
     except KeyboardInterrupt:
         pass
     finally:
-        server.shutdown()
+        # Only if serve_forever actually started. shutdown() waits on an event that
+        # serve_forever sets, so calling it on a server that never served blocks forever.
+        if serving:
+            server.shutdown()
         server.server_close()
         app.runner.stop(wait=2.0)
 
